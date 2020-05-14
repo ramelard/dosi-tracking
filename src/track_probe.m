@@ -1,5 +1,5 @@
 function [newCameraParams, board_rect_out, checkerboard_pts] = ...
-    track_probe(squareSize, frame, calibrationParams, prev_board_rect, prevCameraParams, theta_axis)
+    track_probe(squareSize, frame, calibrationParams, prev_board_rect, ~, ~)
   
   if nargin < 4
     prev_board_rect = [];
@@ -11,9 +11,12 @@ function [newCameraParams, board_rect_out, checkerboard_pts] = ...
     theta_axis = 0;
   end
   
+  %Undistort frame using camera intrinsics
   frame = undistortImage(frame, calibrationParams);
 %   frame = imrotate(frame, theta_axis, 'bicubic', 'crop');
   
+    %Check if this is the first frame (or if the board was lost in the last
+    %frame)
   if isempty(prev_board_rect)
     % If no previous board ROI given, look for checkerboard in whole image.
     [Pcam, boardSize, imagesUsed] = detectCheckerboardPoints(frame);
@@ -22,6 +25,7 @@ function [newCameraParams, board_rect_out, checkerboard_pts] = ...
     rect = prev_board_rect;
     w = rect(3);
     h = rect(4);
+    %Assume no more than 1 checkerboard of movement in previous frame
     rect = round([rect(1)-0.5*w rect(2)-0.5*h w*2 h*2]);
     rect(1) = max(rect(1), 1);
     rect(2) = max(rect(2), 1);
@@ -49,6 +53,7 @@ function [newCameraParams, board_rect_out, checkerboard_pts] = ...
   end
   
   % Update detected board ROI for starting position next time
+  %Pcam is the location of the checkboard points in camera coordinates
   minX = min(Pcam(:,1)); 
   minY = min(Pcam(:,2)); 
   maxX = max(Pcam(:,1)); 
@@ -81,7 +86,7 @@ function [newCameraParams, board_rect_out, checkerboard_pts] = ...
     % I don't think we need to do non-lin least squares because
     % conventionally that's done to find the lens distortion, but that has
     % already been found.
-  
+    %[worldOr, worldLoc] = estimateWorldCameraPose(Pcam(1:2,:)',Pworld(1:3,:)',calibrationParams);
     % newCameraParams
     prevCameraParams = cameraParameters('IntrinsicMatrix', calibrationParams.IntrinsicMatrix, ...
       'RotationVectors', rvecs, ...
@@ -92,16 +97,16 @@ function [newCameraParams, board_rect_out, checkerboard_pts] = ...
       'RadialDistortion', calibrationParams.RadialDistortion);
   %end
 %   else
-    K = prevCameraParams.IntrinsicMatrix';
-    R = prevCameraParams.RotationMatrices';  % transpose?
-    T = prevCameraParams.TranslationVectors(:);
-    M = @(x) K * eye(3,4) * [x(1) x(2) x(3) x(10); ...
-                           x(4) x(5) x(6) x(11); ...
-                           x(7) x(8) x(9) x(12); ...
-                           0    0     0     1];
-    M0 = K * eye(3,4) * [R T; 0 0 0 1];
+    %K = prevCameraParams.IntrinsicMatrix';
+    %R = prevCameraParams.RotationMatrices';  % transpose?
+    %T = prevCameraParams.TranslationVectors(:);
+    %M = @(x) K * eye(3,4) * [x(1) x(2) x(3) x(10); ...
+    %                       x(4) x(5) x(6) x(11); ...
+    %                       x(7) x(8) x(9) x(12); ...
+    %                       0    0     0     1];
+    %M0 = K * eye(3,4) * [R T; 0 0 0 1];
     
-    clear x;
+    %clear x;
     % For some reason, cameraParameter's Rmatrix is the transpose of
     % vectorToMatrix.
 %     Rx = @(x) vision.internal.calibration.rodriguesVectorToMatrix(x)';
@@ -219,16 +224,16 @@ function [rotationVectors, translationVectors] = computeExtrinsics(A, homographi
   rotationVectors = rotationVectors';
   translationVectors = translationVectors';
 end
-
-
-function Pcam2 = unrotate_checkerboard_points(Pcam, theta, frame)
-  assert(size(Pcam,2) == 2);
-  
-  tx = size(frame,1)/2 + 1;  % positive to right
-  ty = size(frame,2)/2 + 1;  % positive down
-  T = [1 0 tx; 0 1 ty; 0 0 1];
-  T2 = [1 0 -tx; 0 1 -ty; 0 0 1];
-  R = rotz(theta);
-  Pcam2 = T*R*T2*[Pcam ones(size(Pcam,1), 1)]';
-  Pcam2 = Pcam2(1:2,:)';
-end
+% 
+% 
+% function Pcam2 = unrotate_checkerboard_points(Pcam, theta, frame)
+%   assert(size(Pcam,2) == 2);
+%   
+%   tx = size(frame,1)/2 + 1;  % positive to right
+%   ty = size(frame,2)/2 + 1;  % positive down
+%   T = [1 0 tx; 0 1 ty; 0 0 1];
+%   T2 = [1 0 -tx; 0 1 -ty; 0 0 1];
+%   R = rotz(theta);
+%   Pcam2 = T*R*T2*[Pcam ones(size(Pcam,1), 1)]';
+%   Pcam2 = Pcam2(1:2,:)';
+% end
