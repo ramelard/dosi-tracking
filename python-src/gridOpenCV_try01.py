@@ -202,17 +202,40 @@ if __name__ == '__main__':
     plt.imshow(frameCol)
     plt.plot(pathXImage, pathYImage)
     
-    dat = loadmat(os.path.join(dataDir,'track_probe_variables-0514_1603.mat'))
+    dat = loadmat(os.path.join(dataDir,'track_probe_variables-0515_1554.mat'))
     matlab3d=dat['sensor3D']
     matlab2d = dat['sensor_route']
     
     plt.figure()   
     plt.plot(pathXWorld,pathYWorld,'o')
     plt.plot(matlab3d[0,:],matlab3d[1,:],'o')
+    plt.legend(('Python','Matlab'))
+    plt.xlabel('X-Position (mm)')
+    plt.ylabel('Y-Position (mm)')
+    plt.title('World coordinates of sensor')
+    plt.savefig('PositionOverlay.png')
     
     plt.figure()
     plt.plot(pathXImage,pathYImage,'o')
     plt.plot(matlab2d[0,:],matlab2d[1,:])
+    
+    diffX = pathXWorld - matlab3d[0,:]
+    diffY = pathYWorld - matlab3d[1,:]
+    diffZ = pathZWorld - matlab3d[2,:]
+    
+    totalDiff = np.sqrt(diffX**2 + diffY**2 + diffZ**2)
+    
+    t = np.arange(len(diffX))/fps
+    
+
+    fig,ax=plt.subplots(3,1,sharex=True,figsize = (7,10))
+    ax[0].plot(t,diffX)
+    ax[0].set(ylabel='X-Difference (mm)',title='Matlab vs. Python')
+    ax[1].plot(t,diffY)
+    ax[1].set(ylabel='Y-Difference (mm)')
+    ax[2].plot(t,diffZ)
+    ax[2].set(xlabel='Time (s)',ylabel='Z-Difference (mm)')
+    plt.savefig('PositionDifference.png')
 
   
 
