@@ -32,6 +32,23 @@ def generateGridPoints(boardSize, squareSize):
         
     return objp
 
+#getCheckerRect
+#
+#PURPOSE: Gets the bounding box of the checkerboard pattern from the corners
+#
+#INPUTS: corners -- 3D array output from findCheckerboardCorners dimensions are [#corners, 1, 2]
+#
+#OUTPUTS: checkerRect -- Left, Top, Width, and Height of the bounding rectnagle
+#
+########################################################
+def getCheckerRect(corners):
+    left = int(np.round(np.min(corners[:,0,0])))
+    top = int(np.round(np.min(corners[:,0,1])))
+    width = int(np.round(np.max(corners[:,0,0]) - left))
+    height = int(np.round(np.max(corners[:,0,1])- top))
+    
+    return [left, top, width, height]
+
 #Entry point when you run the file
 if __name__ == '__main__':
     ##Some constants taken from the Matlab file
@@ -46,7 +63,7 @@ if __name__ == '__main__':
     #Other constants for convenience
     frameWidth = 2048 #(px) Width of video frame
     frameHeight = 2048 #(px) Height of video frame
-    findCornersFactor = .25 #Finding checkerboard corners is slow, so scale down the image by this factor prior to looking for them
+    findCornersFactor = .5 #Finding checkerboard corners is slow, so scale down the image by this factor prior to looking for them
     displayFactor = .5 #The images are too big to fit on my screen, so scale them down by this much before showing
     boardShape = (7,6) #Number of intersections on the checkerboard along X and Y
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) #Criteria for subpixel localization of intersections
@@ -60,7 +77,8 @@ if __name__ == '__main__':
 #  plot([p1(1) p2(1) p3(1) p4(1)], [p1(2) p2(2) p3(2) p4(2)], '.-g', 'linewidth', 2, 'markersize', 20)
     
     #Directory with AVI files
-    dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1'
+    dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left'
+    #dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1'
     f=glob.glob(os.path.join(dataDir,'fc2*.avi')) #list of avi files
     #Get all of the grid points in "Relative" world coordinates
     g=generateGridPoints(boardShape,squareSize)
@@ -79,7 +97,8 @@ if __name__ == '__main__':
     #Followed this guy's instructions: http://blog.nishihara.me/opencv/2015/09/03/how-to-improve-opencv-performance-on-lens-undistortion-from-a-video-feed/
     #Speeds it up a lot
     map1,map2=cv2.initUndistortRectifyMap(cameraMatrix,distCoefs,np.eye(3),cameraMatrix,(frameWidth,frameHeight),cv2.CV_16SC2)
-    
+    #Set the board rectangle initially empty. This holds the coordinates of the chessboard !!IN flatFrameSmall COORDINATES!!
+    boardRect = []
     #Loop through all the video files
     while vidIdx < len(f):
         #Open the video file
@@ -97,12 +116,32 @@ if __name__ == '__main__':
             cv2.remap(gray,map1,map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,dst=flatFrame)
             
             #Shrink the frame for finding corners
-            flatFrameSmoll = cv2.resize(flatFrame,(int(frameWidth*findCornersFactor),int(frameHeight*findCornersFactor)))
-            #Find corners on smaller frame
-            patFound,corners=cv2.findChessboardCorners(flatFrameSmoll,boardShape)
+            flatFrameSmall = cv2.resize(flatFrame,(int(frameWidth*findCornersFactor),int(frameHeight*findCornersFactor)))
+            
+            if len(boardRect) == 0:
+                #Find corners on smaller frame
+                patFound,corners=cv2.findChessboardCorners(flatFrameSmall,boardShape)
+            else:
+                #Crop the small image two twice the board width. Assumes board doesn't move more than 1/2 its width between frames
+                cropLeft = boardRect[0] - boardRect[2]
+                if cropLeft < 0: cropLeft = 0
+                cropRight = boardRect[0] + 2*boardRect[2]
+                if cropRight >= frameWidth*findCornersFactor: cropRight = int(frameWidth*findCornersFactor)
+                cropTop = boardRect[1] - boardRect[3]
+                if cropTop < 0: cropTop = 0
+                cropBottom = boardRect[1] + 2*boardRect[3]
+                if cropBottom >= frameHeight*findCornersFactor: cropTop = int(frameHeight*findCornersFactor)
+                
+                crop_img = flatFrameSmall[cropTop:cropBottom, cropLeft:cropRight]
+                patFound,crop_corners=cv2.findChessboardCorners(crop_img,boardShape)
+                if patFound:
+                    corners[:,0,0] = crop_corners[:,0,0] + cropLeft
+                    corners[:,0,1] = crop_corners[:,0,1] + cropTop
+                #plt.imshow(crop_img)
             
             #If a checkerboard is recognized
             if patFound:
+                boardRect = getCheckerRect(corners)
                 #Do subpixel localization
                 #Corner locations are scaled up to correspond to full resolution frame
                 corners2 = cv2.cornerSubPix(flatFrame,corners/findCornersFactor,(11,11),(-1,-1),criteria)
@@ -167,13 +206,18 @@ if __name__ == '__main__':
                 cv2.circle(frameCol,(ptXInt,ptYInt),10,(255,0,0),-1)
             #If the grid pattern isn't found, do nothing and mark the sensor mask
             else:
+                #frameCol = np.zeros((int(frameWidth*displayFactor),int(frameHeight*displayFactor)),dtype='uint8')
                 sensorMask[frameNum] = False
+                boardRect = []
             
             #Show the frame
-            cv2.imshow('frame',frameCol)
-            #Press q to quit out of the loop
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            try:
+                cv2.imshow('frame',frameCol)
+                #Press q to quit out of the loop
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            except:
+                continue
         vidIdx = vidIdx + 1
         cap.release()
     cv2.destroyAllWindows()
@@ -188,12 +232,12 @@ if __name__ == '__main__':
     sensorMask = sensorMask[0:frameNum+1]
     
     #Split up path variables
-    pathXWorld = [x[0] for x in sensorPathWorld]
-    pathYWorld = [x[1] for x in sensorPathWorld]
-    pathZWorld = [x[2] for x in sensorPathWorld]
+    pathXWorld = np.array([x[0] for x in sensorPathWorld])
+    pathYWorld = np.array([x[1] for x in sensorPathWorld])
+    pathZWorld = np.array([x[2] for x in sensorPathWorld])
     
-    pathXImage = [x[0]/displayFactor for x in sensorPathImage]
-    pathYImage = [x[1]/displayFactor for x in sensorPathImage]
+    pathXImage = np.array([x[0]/displayFactor for x in sensorPathImage])
+    pathYImage = np.array([x[1]/displayFactor for x in sensorPathImage])
     
     #Rudimentary plots
    
@@ -202,28 +246,34 @@ if __name__ == '__main__':
     plt.imshow(frameCol)
     plt.plot(pathXImage, pathYImage)
     
-    dat = loadmat(os.path.join(dataDir,'track_probe_variables-0515_1554.mat'))
+    dat = loadmat(os.path.join(dataDir,'track_probe_variables-0519_1645.mat'))
+    #dat = loadmat(os.path.join(dataDir,'track_probe_variables-0515_1554.mat'))
     matlab3d=dat['sensor3D']
     matlab2d = dat['sensor_route']
+    matlabMask = dat['sensor_mask'].T
+    mlM = [bool(x[0]) for x in matlabMask]
     
     plt.figure()   
-    plt.plot(pathXWorld,pathYWorld,'o')
-    plt.plot(matlab3d[0,:],matlab3d[1,:],'o')
+    plt.plot(pathXWorld[sensorMask],pathYWorld[sensorMask],'o')
+    plt.plot(matlab3d[0,mlM],matlab3d[1,mlM],'o')
     plt.legend(('Python','Matlab'))
     plt.xlabel('X-Position (mm)')
     plt.ylabel('Y-Position (mm)')
     plt.title('World coordinates of sensor')
-    plt.savefig('PositionOverlay.png')
+    plt.savefig('PositionOverlay_leg.png')
     
     plt.figure()
-    plt.plot(pathXImage,pathYImage,'o')
-    plt.plot(matlab2d[0,:],matlab2d[1,:])
+    plt.plot(pathXImage[sensorMask],pathYImage[sensorMask])
+    plt.plot(matlab2d[0,mlM],matlab2d[1,mlM])
     
-    diffX = pathXWorld - matlab3d[0,:]
-    diffY = pathYWorld - matlab3d[1,:]
-    diffZ = pathZWorld - matlab3d[2,:]
+    diffX = pathXWorld[0:800] - matlab3d[0,0:800]
+    diffY = pathYWorld[0:800] - matlab3d[1,0:800]
+    diffZ = pathZWorld[0:800] - matlab3d[2,0:800]
     
     totalDiff = np.sqrt(diffX**2 + diffY**2 + diffZ**2)
+    
+    plt.figure()
+    plt.hist(totalDiff,bins=100)
     
     t = np.arange(len(diffX))/fps
     
@@ -235,7 +285,7 @@ if __name__ == '__main__':
     ax[1].set(ylabel='Y-Difference (mm)')
     ax[2].plot(t,diffZ)
     ax[2].set(xlabel='Time (s)',ylabel='Z-Difference (mm)')
-    plt.savefig('PositionDifference.png')
+    plt.savefig('PositionDifference_leg.png')
 
   
 
