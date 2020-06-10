@@ -8,8 +8,11 @@ Created on Fri May 29 15:35:26 2020
 import numpy as np
 from matplotlib import pyplot as plt
 from PIL import Image
+import cv2
 import random
 import csv
+import pickle
+import os
 
 #createChessboard
 #
@@ -22,21 +25,25 @@ import csv
 #    chess:       3D matrix with dimensions[xpx, ypx, [x,y,z,color]]
 #
 #Notes: the X and Y values are centered at 0,0 and the color is 0 or 255
-def createChessboard(boardShape, squareSizePx):
-    blackLine= np.zeros((1,squareSizePx))       #A single black edge
-    whiteLine = np.ones((1,squareSizePx))*255   #A single white edge
+def createChessboard(boardShape, squareSize_mm):
+    pxPerSquare = 50
+    blackLine= np.zeros((1,pxPerSquare))       #A single black edge
+    whiteLine = np.ones((1,pxPerSquare))*255   #A single white edge
     #Start with empty arrays for each line
     blackFirstLine = np.array([]) #Line starting with black square
     whiteFirstLine = np.array([]) #Line starting with white square
     #Preallocate for the full board
-    chess = np.zeros(((boardShape[1]+1)*squareSizePx,(boardShape[0]+1)*squareSizePx,4))
+    chess = np.zeros(((boardShape[1]+1)*pxPerSquare,(boardShape[0]+1)*pxPerSquare,4))
     #Calculate number of pixels needed in both axes
-    numPxX = (boardShape[0]+1) * squareSizePx
-    numPxY = (boardShape[1]+1) * squareSizePx
+    numPxX = (boardShape[0]+1) * pxPerSquare
+    numPxY = (boardShape[1]+1) * pxPerSquare
+    
+    mmX = squareSize_mm * (boardShape[0] + 1)
+    mmY = squareSize_mm * (boardShape[1] + 1)
     
     #Values for the X and Y axis centered at (0,0)
-    xVals= np.arange(-numPxX/2, numPxX/2)
-    yVals = np.arange(-numPxY/2, numPxY/2)
+    xVals= np.linspace(-mmX/2, mmX/2,numPxX)
+    yVals = np.linspace(-mmY/2, mmY/2,numPxY)
     #Meshgrid the arrays to get grid of X,Y locations        
     xv,yv = np.meshgrid(xVals,yVals)
     zv = np.zeros(xv.shape) #Z is always 0 when starting out
@@ -53,10 +60,10 @@ def createChessboard(boardShape, squareSizePx):
             blackFirstLine = np.append(blackFirstLine,whiteLine)
             whiteFirstLine = np.append(whiteFirstLine,blackLine)
     #Stack lines into 2D image
-    bfFlag = False #Flat for whether this should be a black square first or white square first row
-    for j in range((boardShape[0]+1)*squareSizePx):
+    bfFlag = False #Flag for whether this should be a black square first or white square first row
+    for j in range((boardShape[0]+1)*pxPerSquare):
         #Flip the rows after one square complete
-        if j % squareSizePx == 0:
+        if j % pxPerSquare == 0:
             bfFlag = not bfFlag
         #Append a line depending on whether it should be black or white first
         if bfFlag:
@@ -112,11 +119,22 @@ def transformPts(objPoints,rotation,translation):
 #       generated look approximately right to my eye given the distances involved, so I'm going with it. This will probably need to be
 #       changed when working with real images
 #def projectPts(objPoints,imgDist):
-def projectPts(objPoints, imFOV):
-    rx = 36 #mm. Size of the recording medium (using 35mm film size)
-    ry = 24 #mm
-    rz = -50 #mm Distance of the recording medium from camera pinhole (using focal length of lens)
-    
+def projectPts(objPoints, rvec, tvec):
+    ##Some constants taken from the Matlab file
+    cameraMatrix = np.matrix([[2858.2, 0     , 1051.3],\
+                              [0     , 2849.7, 1064.8],\
+                              [0     ,0      ,    1  ]]) #Camera intrinsics
+    #distCoefs = np.array([-.2499,.2871,0,0]) #Distortion coefficients
+    #rx = 36 #mm. Size of the recording medium (using 35mm film size)
+    #ry = 24 #mm
+    #rz = -50 #mm Distance of the recording medium from camera pinhole (using focal length of lens)
+    rMat = cv2.Rodrigues(rvec)[0]
+    rotMat4x4 = np.vstack((np.hstack((rMat,np.array([0,0,0]).reshape(3,1))),np.array([0,0,0,1]).reshape(1,4)))
+    #Make translation matrix 4x4
+    tMat4x4 = np.vstack((np.hstack((np.zeros((3,3)),tvec.reshape(3,1))),np.array([0,0,0,0]).reshape(1,4)))
+    #Combine both matricies
+    #M0 is the transformation from World space to Camera Space
+    extrinsicMatrix = rotMat4x4 + tMat4x4
     #Allocate memory for new image
     projPts = np.zeros((objPoints.shape[0],objPoints.shape[1],3))
     #Copy color value into the last page
@@ -125,13 +143,15 @@ def projectPts(objPoints, imFOV):
     for i in range(objPoints.shape[0]):
         for j in range(objPoints.shape[1]):
             thisPt = objPoints[i,j,0:3]
-            thisX = (thisPt[0]*imFOV[0])/(thisPt[2]*rx) * rz
-            thisY = (thisPt[1]*imFOV[1])/(thisPt[2]*ry) * rz
+            cameraCoords = extrinsicMatrix.dot(np.append(thisPt,1))
+            #thisX = (thisPt[0]*imFOV[0])/(thisPt[2]*rx) * rz
+            #thisY = (thisPt[1]*imFOV[1])/(thisPt[2]*ry) * rz
             #projPts[i,j,0:2] = np.array([imgDist/thisPt[2]*thisPt[0],imgDist/thisPt[2]*thisPt[1]])
-            projPts[i,j,0:2] = np.array([thisX,thisY])
+            pPoint = cameraMatrix.dot(cameraCoords[0:3])
+            projPts[i,j,0:2] = np.array([pPoint[0,0]/pPoint[0,2],pPoint[0,1]/pPoint[0,2]])
             
-    if rz < 0:
-        projPts = np.flipud(np.fliplr(projPts))
+    # if rz < 0:
+    #     projPts = np.flipud(np.fliplr(projPts))
         
     return projPts
 
@@ -146,44 +166,40 @@ def projectPts(objPoints, imFOV):
 #   pxPermm:        Pixel size IN CHESSBOARD COORDINATES
 #
 #NOTES: I'm not sure if this is 100 percent right. See notes on "boolX" and "boolY" lines
-def getSimulatedImage(imSzPx, imFOV, projectedImage,pxPermm):
+def getSimulatedImage(imSzPx, projectedImage):
     
     bgVal = 128 #Background value to use when the target isn't in frame
     #Allocate memory for simulated image
-    simImg = np.ones((imSzPx[1],imSzPx[0]),'uint8')
+    simImg = np.ones((imSzPx[1],imSzPx[0]),'uint8') * bgVal
     #X and Y location of each pixel in mm
-    pxLocX = np.linspace(-imFOV[0]/2,imFOV[0]/2,imSzPx[0])
-    pxLocY = np.linspace(-imFOV[1]/2, imFOV[1]/2,imSzPx[1])
+    #pxLocX = np.linspace(-imFOV[0]/2,imFOV[0]/2,imSzPx[0])
+    #pxLocY = np.linspace(-imFOV[1]/2, imFOV[1]/2,imSzPx[1])
     #Size of each pixel (mm)
-    pxSz = pxLocX[1]-pxLocX[0]
+    #pxSz = pxLocX[1]-pxLocX[0]
     #Bounding box for the probe
     minLocX = np.min(p[:,:,0])
     minLocY = np.min(p[:,:,1])
     maxLocX = np.max(p[:,:,0])
     maxLocY = np.max(p[:,:,1])
     
-    mmPerPx = 1/pxPermm
+    #mmPerPx = 1/pxPermm
     
     #Iterate through each pixel in the final simulated image
-    for x in range(imSzPx[0]):
-        for  y in range(imSzPx[1]):
+    for x in range(int(np.floor(minLocX)),int(np.ceil(maxLocX)+1)):
+        for  y in range(int(np.floor(minLocY)),int(np.ceil(maxLocY)+1)):
             #The edges of this pixel
-             locMM_x = [pxLocX[x],pxLocX[x]+pxSz]
-             locMM_y = [pxLocY[y],pxLocY[y]+pxSz]
+             #locMM_x = [pxLocX[x],pxLocX[x]+pxSz]
+             #locMM_y = [pxLocY[y],pxLocY[y]+pxSz]
              #If the pixel is outside of the probe bounding box set it to background value
-             if locMM_x[0] < minLocX or \
-             locMM_x[1] > maxLocX or \
-             locMM_y[0] < minLocY or \
-             locMM_y[1] > maxLocY:
-                 
-                 simImg[y,x] = bgVal
+             if x < 0 or y < 0:
+                 continue
              #Pixel is inside the bounding box    
              else:
                 #Find the projected image pixels that are inside of this pixel
                 #The chessboard pixel location is assumed to be the center of the pixel. So the pixel point is expanded so that each
                 #location in the chessboard has at least one pixel in the final image. The results look okay, but the logic here is troubling me a bit.
-                boolX = np.logical_and(p[:,:,0]+mmPerPx/2 >= locMM_x[0], p[:,:,0]-mmPerPx/2<=locMM_x[1])
-                boolY = np.logical_and(p[:,:,1]+mmPerPx/2 >= locMM_y[0], p[:,:,1]-mmPerPx/2<=locMM_y[1])
+                boolX = np.logical_and(p[:,:,0] >= x, p[:,:,0]< x+1)
+                boolY = np.logical_and(p[:,:,1] >= y, p[:,:,1]< y+1)
                 
                 imVals = np.logical_and(boolX,boolY)
                 #Projected image pixels that fall inside this pixel
@@ -199,7 +215,8 @@ def getSimulatedImage(imSzPx, imFOV, projectedImage,pxPermm):
                 #Otherwise we're on an edge so. . .
                 #Calculate weighted sum by distance to find the final color
                 else:
-                    dist = np.sqrt((pxs[:,0]-pxLocX[x])**2 + (pxs[:,1]-pxLocY[y])**2) #Distance of each image pixel from the center of this pixel
+                    #print("squirrly edge")
+                    dist = np.sqrt((pxs[:,0]-x)**2 + (pxs[:,1]-y)**2) #Distance of each image pixel from the center of this pixel
                     invDist = 1/dist 
                     #Calculate weighted sum of each pixel
                     wtbydist = invDist/np.sum(invDist) * pxs[:,2]
@@ -214,15 +231,16 @@ def getSimulatedImage(imSzPx, imFOV, projectedImage,pxPermm):
 if __name__ == '__main__':
     
     
-    squareSize = 10 #mm
-    pxPermm = 3.2 #px/mm
-    imSzPx = [640,360] #pixels
-    imFOV = [imSzPx[0]/pxPermm, imSzPx[1]/pxPermm] #mm
+    squareSize = 6.7 #mm
+    pxPermm = 3.8 #px/mm
+    imSzPx = [2048,2048] #pixels
+    #imFOV = [imSzPx[0]/pxPermm, imSzPx[1]/pxPermm] #mm
+    stillImgDir  = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\stills'
+    with open(os.path.join(stillImgDir,'selectedExtrinsics.pkl'), 'rb') as f:  
+        saveRot, saveTrans = pickle.load(f)
     
-   
-    
-    c = createChessboard((4,3),int(squareSize*pxPermm))
-    numTrials = 1000
+    c = createChessboard((7,6),squareSize)
+    numTrials = len(saveRot)
     zRotRange = [0,2*np.pi]
     xRotRange = [-np.pi/6,np.pi/6]
     yRotRange = [-np.pi/6,np.pi/6]
@@ -249,11 +267,11 @@ if __name__ == '__main__':
         
       
         transPx = np.array([thisTransX,thisTransY,thisTransZ])*pxPermm
-        r = transformPts(c,[thisRotX,thisRotY,thisRotZ],transPx)
-        
+        #r = transformPts(c,[thisRotX,thisRotY,thisRotZ],transPx)
+        #r = transformPts(c, [np.pi/4,0,0.0],[0,-100,1000.0])
         # transPx = np.array([0,0,thisTransZ])*pxPermm
         # r = transformPts(c,[np.pi/4,0,0],transPx)
-        p = projectPts(r,imFOV)
+        p = projectPts(c,saveRot[i],saveTrans[i])
         
         # plt.pcolor(c[:,:,0],c[:,:,1],c[:,:,3])
         # plt.xlim((0,24))
@@ -267,11 +285,13 @@ if __name__ == '__main__':
         
         plt.pcolor(p[:,:,0],p[:,:,1],p[:,:,2])
         plt.axis('equal')
-        plt.xlim([-imFOV[0]/2,imFOV[0]/2])
-        plt.ylim([-imFOV[1]/2,imFOV[1]/2])
+        plt.xlim([0,2048])
+        plt.ylim([0,2048])
+        # plt.xlim([-imFOV[0]/2,imFOV[0]/2])
+        # plt.ylim([-imFOV[1]/2,imFOV[1]/2])
         plt.show()
         
-        simImg = getSimulatedImage(imSzPx,imFOV,p,pxPermm)
+        simImg = getSimulatedImage(imSzPx,p)
         
         plt.pcolor(simImg)
         plt.axis('equal')
@@ -281,7 +301,7 @@ if __name__ == '__main__':
         
         im = Image.new('L',(simImg.shape[1],simImg.shape[0]))
         im.putdata(simImg.ravel())
-        im.save('D:\\Work\\RoblyerLab\\trackDOSI\\plots\\simProbe\\'+fname)
+        im.save(os.path.join(stillImgDir,fname))
       
         it = it+1
         #plt.imshow(simImg,origin='lower')

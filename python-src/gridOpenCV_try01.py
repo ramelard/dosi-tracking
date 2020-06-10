@@ -14,6 +14,7 @@ import glob
 import time
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
+import pickle
 
 #generateGridPoints
 #
@@ -74,10 +75,14 @@ if __name__ == '__main__':
     p2 = np.array([-38, 0, 0],dtype=float)
     p3 = np.array([-38, 45, 0],dtype=float)
     p4 = np.array([-38, 45, probe_depth],dtype=float)
+    
+    saveRot = []
+    saveTrans = []
 #  plot([p1(1) p2(1) p3(1) p4(1)], [p1(2) p2(2) p3(2) p4(2)], '.-g', 'linewidth', 2, 'markersize', 20)
     
     #Directory with AVI files
     dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left'
+    saveDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\stills'
     #dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1'
     f=glob.glob(os.path.join(dataDir,'fc2*.avi')) #list of avi files
     #Get all of the grid points in "Relative" world coordinates
@@ -111,6 +116,7 @@ if __name__ == '__main__':
                 break
             #Increment frame counter
             frameNum = frameNum + 1
+       
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #Convert to grayscale
             #This is the second half of the undistortion function that is pretty fast
             cv2.remap(gray,map1,map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,dst=flatFrame)
@@ -153,6 +159,12 @@ if __name__ == '__main__':
                 #Paper ref: T. Collins and A. Bartoli. "Infinitesimal Plane-Based Pose Estimation" 
                 retVal, rvec,tvec=cv2.solvePnP(g,corners2,cameraMatrix,0,flags=cv2.SOLVEPNP_IPPE)
                 
+                if frameNum % 90 == 0:
+                    fname = "stillFromVideo_%04d.png" % frameNum
+                    cv2.imwrite(os.path.join(saveDir,fname),flatFrame)
+                    saveRot.append(rvec)
+                    saveTrans.append(tvec)
+                    
                 if firstTime: #If this is the first frame do some calculations
                     firstTime = False #make sure this only runs once
                     firstIm = flatFrame #Save the first image because why not
@@ -286,6 +298,11 @@ if __name__ == '__main__':
     ax[2].plot(t,diffZ)
     ax[2].set(xlabel='Time (s)',ylabel='Z-Difference (mm)')
     plt.savefig('PositionDifference_leg.png')
+    
+    with open(os.path.join(saveDir,'selectedExtrinsics.pkl'), 'wb') as f:  
+        pickle.dump([saveRot,saveTrans], f)
+
+    
 
   
 
