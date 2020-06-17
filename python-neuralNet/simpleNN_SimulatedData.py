@@ -23,7 +23,7 @@ from matplotlib import pyplot as plt
 #Directory with simulated images
 imDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\plots\\simProbe'
 #File with labels for images
-dataFile = 'D:\\googleDrive\\dDOSI\\trackDOSI\\code\\trackGrid\\code\\probePosition.csv'
+dataFile = 'C:\\Users\\Matthew\\Documents\\GitHub\\dosi-tracking\\python-neuralNet\\probePosition.csv'
 
 #Set seed for reproducibility
 tf.random.set_seed(14850)
@@ -32,6 +32,7 @@ random.seed(14850)
 #Calculate number of images
 fList = glob.glob(os.path.join(imDir,'*.tif'))
 numIms = len(fList)
+numIms = 689 #The code crashed partway through and I had to start it over, so I only got this many images
 #Preallocate for labels
 data = np.zeros((numIms,6))
 #Load CSV into matrix
@@ -44,11 +45,14 @@ with open(dataFile,newline='') as f:
         line_ct = line_ct+1
         
 #Gather all images into a big 'ole matrix (numIms, rows, columns, channels)
-imRes = np.array([640,360])
+imRes = np.array([2048,2048])
 imMatrix = np.zeros((numIms,imRes[1],imRes[0],1),dtype='uint8')
 imNum = 0
+idx = 0
 for fname in fList:
-    imMatrix[imNum,:,:,0] = np.array(Image.open(fname))
+    if imNum > 310:
+        imMatrix[idx,:,:,0] = np.array(Image.open(fname))
+        idx = idx+1
     imNum = imNum+1
      
 # Split the data into training and testing sets
@@ -91,9 +95,9 @@ model.compile(loss='mse',
               optimizer='adam',
               metrics=['mse','mae'])
 
-model.fit(trainIms, trainLabels, epochs=1000,verbose=1)
+model.fit(trainIms, trainLabels, epochs=50,verbose=1,batch_size=10)
 
-test_loss,test_mse,test_mae = model.evaluate(testIms,testLabels)
+test_loss,test_mse,test_mae = model.evaluate(testIms,testLabels,batch_size=10)
 print('Test accuracy: ', test_mse)
 
 predX = model.predict(testIms)

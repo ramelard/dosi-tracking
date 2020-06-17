@@ -26,7 +26,7 @@ import os
 #
 #Notes: the X and Y values are centered at 0,0 and the color is 0 or 255
 def createChessboard(boardShape, squareSize_mm):
-    pxPerSquare = 50
+    pxPerSquare = 40
     blackLine= np.zeros((1,pxPerSquare))       #A single black edge
     whiteLine = np.ones((1,pxPerSquare))*255   #A single white edge
     #Start with empty arrays for each line
@@ -121,8 +121,8 @@ def transformPts(objPoints,rotation,translation):
 #def projectPts(objPoints,imgDist):
 def projectPts(objPoints, rvec, tvec):
     ##Some constants taken from the Matlab file
-    cameraMatrix = np.matrix([[2858.2, 0     , 1051.3],\
-                              [0     , 2849.7, 1064.8],\
+    cameraMatrix = np.matrix([[2858.2, 0     , 1009.3],\
+                              [0     , 2849.7, 1135.8],\
                               [0     ,0      ,    1  ]]) #Camera intrinsics
     #distCoefs = np.array([-.2499,.2871,0,0]) #Distortion coefficients
     #rx = 36 #mm. Size of the recording medium (using 35mm film size)
@@ -193,13 +193,15 @@ def getSimulatedImage(imSzPx, projectedImage):
              #If the pixel is outside of the probe bounding box set it to background value
              if x < 0 or y < 0:
                  continue
+             elif x >= imSzPx[1] or y >= imSzPx[0]:
+                 continue
              #Pixel is inside the bounding box    
              else:
                 #Find the projected image pixels that are inside of this pixel
                 #The chessboard pixel location is assumed to be the center of the pixel. So the pixel point is expanded so that each
                 #location in the chessboard has at least one pixel in the final image. The results look okay, but the logic here is troubling me a bit.
-                boolX = np.logical_and(p[:,:,0] >= x, p[:,:,0]< x+1)
-                boolY = np.logical_and(p[:,:,1] >= y, p[:,:,1]< y+1)
+                boolX = np.logical_and(p[:,:,0] >= x-.5, p[:,:,0]< x+1.5)
+                boolY = np.logical_and(p[:,:,1] >= y-.5, p[:,:,1]< y+1.5)
                 
                 imVals = np.logical_and(boolX,boolY)
                 #Projected image pixels that fall inside this pixel
@@ -234,44 +236,49 @@ if __name__ == '__main__':
     squareSize = 6.7 #mm
     pxPermm = 3.8 #px/mm
     imSzPx = [2048,2048] #pixels
+    stillImgDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\plots\\simProbe'
     #imFOV = [imSzPx[0]/pxPermm, imSzPx[1]/pxPermm] #mm
-    stillImgDir  = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\stills'
-    with open(os.path.join(stillImgDir,'selectedExtrinsics.pkl'), 'rb') as f:  
-        saveRot, saveTrans = pickle.load(f)
+    # stillImgDir  = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\stills'
+    # with open(os.path.join(stillImgDir,'selectedExtrinsics.pkl'), 'rb') as f:  
+    #     saveRot, saveTrans = pickle.load(f)
     
     c = createChessboard((7,6),squareSize)
-    numTrials = len(saveRot)
+    numTrials = 1000
     zRotRange = [0,2*np.pi]
-    xRotRange = [-np.pi/6,np.pi/6]
-    yRotRange = [-np.pi/6,np.pi/6]
+    xRotRange = [-np.pi/4,np.pi/4]
+    yRotRange = [-np.pi/4,np.pi/4]
     
-    xTransRange=[-40,40]
-    yTransRange=[-25,25]
-    zTransRange =[200,300] 
+    xTransRange=[-110.0,110.0]
+    yTransRange=[-110.0,110.0]
+    zTransRange =[400.0,700.0] 
     it = 0
     
     probePos = np.zeros((3,numTrials))
     probeAngle =  np.zeros((3,numTrials))
-    for i in range(numTrials):
+    for i in range(0,numTrials):
         print("working on sim image %d of %d" % ((it+1),numTrials))
         
-        thisRotX = xRotRange[0] + (xRotRange[1]-xRotRange[0]) * random.random()
-        thisRotY = yRotRange[0] + (yRotRange[1]-yRotRange[0]) * random.random()
-        thisRotZ = zRotRange[0] + (zRotRange[1]-zRotRange[0]) * random.random()
-        thisTransX = xTransRange[0] + (xTransRange[1]-xTransRange[0]) * random.random()
-        thisTransY = yTransRange[0] + (yTransRange[1]-yTransRange[0]) * random.random()
-        thisTransZ = zTransRange[0] + (zTransRange[1]-zTransRange[0]) * random.random()
+        thisRotX = np.round(xRotRange[0] + (xRotRange[1]-xRotRange[0]) * random.random(),2)
+        thisRotY = np.round(yRotRange[0] + (yRotRange[1]-yRotRange[0]) * random.random(),2)
+        thisRotZ = np.round(zRotRange[0] + (zRotRange[1]-zRotRange[0]) * random.random(),2)
+        thisTransX = np.round(xTransRange[0] + (xTransRange[1]-xTransRange[0]) * random.random())
+        thisTransY = np.round(yTransRange[0] + (yTransRange[1]-yTransRange[0]) * random.random())
+        thisTransZ = np.round(zTransRange[0] + (zTransRange[1]-zTransRange[0]) * random.random())
         
         probePos[:,i] = np.array([thisTransX,thisTransY,thisTransZ])
         probeAngle[:,i] = np.array([thisRotX, thisRotY,thisRotZ])
         
       
-        transPx = np.array([thisTransX,thisTransY,thisTransZ])*pxPermm
+        transPx = np.array([thisTransX,thisTransY,thisTransZ])
+        # print(transPx)
+        # print(probeAngle[:,i])
         #r = transformPts(c,[thisRotX,thisRotY,thisRotZ],transPx)
         #r = transformPts(c, [np.pi/4,0,0.0],[0,-100,1000.0])
         # transPx = np.array([0,0,thisTransZ])*pxPermm
         # r = transformPts(c,[np.pi/4,0,0],transPx)
-        p = projectPts(c,saveRot[i],saveTrans[i])
+        
+        p = projectPts(c,np.array([thisRotX,thisRotY,thisRotZ]),transPx)
+        #p = projectPts(c, np.array([0,0,0.0]),np.array([0,100,700.0]))
         
         # plt.pcolor(c[:,:,0],c[:,:,1],c[:,:,3])
         # plt.xlim((0,24))

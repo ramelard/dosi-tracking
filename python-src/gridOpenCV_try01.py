@@ -82,7 +82,7 @@ if __name__ == '__main__':
     
     #Directory with AVI files
     dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left'
-    saveDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\stills'
+    saveDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\trackedVideo'
     #dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1'
     f=glob.glob(os.path.join(dataDir,'fc2*.avi')) #list of avi files
     #Get all of the grid points in "Relative" world coordinates
@@ -159,11 +159,11 @@ if __name__ == '__main__':
                 #Paper ref: T. Collins and A. Bartoli. "Infinitesimal Plane-Based Pose Estimation" 
                 retVal, rvec,tvec=cv2.solvePnP(g,corners2,cameraMatrix,0,flags=cv2.SOLVEPNP_IPPE)
                 
-                if frameNum % 90 == 0:
-                    fname = "stillFromVideo_%04d.png" % frameNum
-                    cv2.imwrite(os.path.join(saveDir,fname),flatFrame)
-                    saveRot.append(rvec)
-                    saveTrans.append(tvec)
+                # if frameNum % 90 == 0:
+                #     fname = "stillFromVideo_%04d.png" % frameNum
+                #     cv2.imwrite(os.path.join(saveDir,fname),flatFrame)
+                #     saveRot.append(rvec)
+                #     saveTrans.append(tvec)
                     
                 if firstTime: #If this is the first frame do some calculations
                     firstTime = False #make sure this only runs once
@@ -216,6 +216,10 @@ if __name__ == '__main__':
   
                 #Draw circle at detector location
                 cv2.circle(frameCol,(ptXInt,ptYInt),10,(255,0,0),-1)
+                fname = "trackedFrame_%04d.png" % frameNum
+                
+                #Save images
+                #cv2.imwrite(os.path.join(saveDir,fname),frameCol)
             #If the grid pattern isn't found, do nothing and mark the sensor mask
             else:
                 #frameCol = np.zeros((int(frameWidth*displayFactor),int(frameHeight*displayFactor)),dtype='uint8')
