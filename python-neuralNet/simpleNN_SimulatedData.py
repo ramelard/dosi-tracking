@@ -100,8 +100,8 @@ model.fit(trainIms, trainLabels, epochs=50,verbose=1,batch_size=10)
 test_loss,test_mse,test_mae = model.evaluate(testIms,testLabels,batch_size=10)
 print('Test accuracy: ', test_mse)
 
-predX = model.predict(testIms)
-trainPred = model.predict(trainIms)
+predX = model.predict(testIms,batch_size=10)
+trainPred = model.predict(trainIms,batch_size=10)
 
 fig = plt.figure()
 plt.plot(testLabels[:,0],predX[:,0],'o')
@@ -112,7 +112,7 @@ plt.legend(["X","Y","Z"])
 plt.xlabel('Known Location (mm)')
 plt.ylabel('Predicted Location (mm)')
 plt.title('Neural Network Test Accuracy')
-
+plt.savefig('testingAccuracy.png')
 
 fig = plt.figure()
 plt.plot(trainLabels[:,0],trainPred[:,0],'o')
@@ -123,7 +123,7 @@ plt.legend(["X","Y","Z"])
 plt.xlabel('Known Location (mm)')
 plt.ylabel('Predicted Location (mm)')
 plt.title('Neural Network Train Accuracy')
-
+plt.savefig('trainingAccuracy.png')
 # diffX = dataTest["centerX"] - predX[:,0]
 # diffY = dataTest["centerY"] - predX[:,1]
 

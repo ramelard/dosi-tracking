@@ -22,14 +22,14 @@ def getCheckerRect(corners):
 if __name__ == '__main__':
     dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\plots\\simProbe\\'
     
-    boardShape = (4,3)
-    squareSize = 10
+    boardShape = (7,6)
+    squareSize = 6.7
     objp = np.zeros((np.prod(boardShape),3), np.float32)
     objp[:,:2] = np.mgrid[0:boardShape[0],0:boardShape[1]].T.reshape(-1,2) * squareSize
-    frameWidth = 640 #(px) Width of video frame
-    frameHeight = 360 #(px) Height of video frame
-    findCornersFactor = 1 #Finding checkerboard corners is slow, so scale down the image by this factor prior to looking for them
-    displayFactor = 1 #The images are too big to fit on my screen, so scale them down by this much before showing
+    frameWidth = 2048 #(px) Width of video frame
+    frameHeight = 2048 #(px) Height of video frame
+    findCornersFactor = .5 #Finding checkerboard corners is slow, so scale down the image by this factor prior to looking for them
+    displayFactor = .5 #The images are too big to fit on my screen, so scale them down by this much before showing
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) #Criteria for subpixel localization of intersections
     cameraMatrix = np.eye(3)
     
@@ -139,9 +139,9 @@ if __name__ == '__main__':
     
     cv2.destroyAllWindows()
     
-    dataFile = 'D:\\googleDrive\\dDOSI\\trackDOSI\\code\\trackGrid\\code\\probePosition.csv'
+    dataFile = 'C:\\Users\\Matthew\\Documents\\GitHub\\dosi-tracking\\python-neuralNet\\probePosition.csv'
     numIms = len(sensorMask)
-    data = np.zeros((numIms,6))
+    data = np.zeros((690,6))
     with open(dataFile,newline='') as f:
         reader = csv.reader(f)
         line_ct = 0
@@ -150,5 +150,5 @@ if __name__ == '__main__':
                 data[line_ct-1,:] = row
             line_ct = line_ct+1
     
-    plt.plot(data[:,1],sensorPathWorld[:,1],'o')
+    plt.plot(data[:,1],sensorPathWorld[310::,1],'o')
     plt.show()
