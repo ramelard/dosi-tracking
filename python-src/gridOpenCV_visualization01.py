@@ -55,7 +55,7 @@ def getCheckerRect(corners):
 def getMeasTimes(filePath):
     with open(filePath,'r') as f:
             timeFile = csv.reader(f, delimiter='\t')
-            header = next(timeFile)
+            _ = next(timeFile)
             #it = 0
             times = []
             for row in timeFile:
@@ -69,7 +69,7 @@ def getMeasTimes(filePath):
 def getOPs(filePath):
     with open(filePath, 'r') as f:
         opFile = csv.reader(f, delimiter='\t')
-        header = next(opFile)
+        _ = next(opFile)
         rowNum = 0
         mua = []
         mus = []
@@ -79,6 +79,37 @@ def getOPs(filePath):
                 mus.append(float(row[6]))
             rowNum = rowNum + 1
     return mua,mus
+
+def getVizPixel(frameWidth,frameHeight,spacingX,spacingY, ptX,ptY):
+    edgesX = np.array(range(0,int(frameWidth),int(spacingX)),dtype='int')
+    edgesY = np.array(range(0,int(frameHeight),int(spacingY)),dtype='int')
+    
+    vizPxX = np.array(range(0,len(edgesX)),dtype='int')
+    vizPxY = np.array(range(0,len(edgesY)),dtype='int')
+    
+    candidateX = np.array(edgesX) < ptX
+    candidateY = np.array(edgesY) < ptY
+    
+    pixX = vizPxX[candidateX]
+    pixY = vizPxY[candidateY]
+    
+    return (pixX[-1], pixY[-1])
+
+def getColorbarIm(frameWidth, frameHeight,barWidth,cmap):
+    colorBarIm = np.zeros((frameHeight,frameWidth,3), np.uint8)
+ 
+    #Make the colorbar for the scan. This will stay the same no matter what the range of values is. Only the numbers will change
+    #Do this by drawing a rectangle for every value in the color map from 0-255
+    for i in range(256):
+        thisRect = np.zeros((2,barWidth,3))
+        thisColBGR = np.flip(np.array(cmap(i)[0:3]))
+        thisRect[:,:,0] = int(thisColBGR[0]*255)
+        thisRect[:,:,1] = int(thisColBGR[1]*255)
+        thisRect[:,:,2] = int(thisColBGR[2]*255)
+        colorBarIm[104+(2*(255-i)):2*(255-i)+106,(frameWidth-barWidth):frameWidth,:] = thisRect
+    
+    return colorBarIm
+
 #Entry point when you run the file
 if __name__ == '__main__':
     ##Some constants taken from the Matlab file
@@ -98,6 +129,12 @@ if __name__ == '__main__':
     displayFactor = .5 #The images are too big to fit on my screen, so scale them down by this much before showing
     boardShape = (7,6) #Number of intersections on the checkerboard along X and Y
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) #Criteria for subpixel localization of intersections
+    vizSize = (100,100) #Size of visualization
+    vizAvgMua = np.zeros(vizSize)
+    vizNum = np.zeros(vizSize,dtype='int')
+    barWidth = 50
+    cmap = plt.cm.jet
+    colorBarIm = getColorbarIm(int(frameWidth*displayFactor),int(frameHeight*displayFactor),barWidth,cmap)
     #Location of the detector in "Relative" world coordinates
     sensorLoc = np.array([origin_to_sensorX, origin_to_sensorY, probe_depth])
     #Locations outlining probe
@@ -106,13 +143,17 @@ if __name__ == '__main__':
     p3 = np.array([-38, 45, 0],dtype=float)
     p4 = np.array([-38, 45, probe_depth],dtype=float)
     
+    vizCoordsX = int(np.round(frameWidth/vizSize[0])) * displayFactor
+    vizCoordsY = int(np.round(frameHeight/vizSize[1])) *displayFactor
+    
     saveRot = []
     saveTrans = []
 #  plot([p1(1) p2(1) p3(1) p4(1)], [p1(2) p2(2) p3(2) p4(2)], '.-g', 'linewidth', 2, 'markersize', 20)
     
     #Directory with AVI files
     dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left'
-    saveDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\trial1_left\\trackedVideo'
+    #dataDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1'
+    saveDir = 'D:\\Work\\RoblyerLab\\trackDOSI\\data\\hand1\\trackedVideo'
     
     t_meas=getMeasTimes(os.path.join(dataDir,'ptrcalf2_180726_left__TIME_bg.asc'))
     measMua, measMus = getOPs(os.path.join(dataDir,'ptrcalf2_180726_left__dBMU.asc'))
@@ -140,7 +181,8 @@ if __name__ == '__main__':
     boardRect = []
     mLocX = []
     mLocY = []
-    mLocZ = []
+    #mMua = []
+    #Mus = []
     #Loop through all the video files
     while vidIdx < len(f):
         #Open the video file
@@ -241,9 +283,15 @@ if __name__ == '__main__':
                 imgp4, _ = cv2.projectPoints(p4, rvec, tvec, cameraMatrix, 0)
                 if tVid >= t_measSecs:
                     #print(measNum)
-                    measNum = measNum + 1
+                    
                     mLocX.append(int(np.round(imgpts[0,0,0]*displayFactor)))
                     mLocY.append(int(np.round(imgpts[0,0,1]*displayFactor)))
+                    (vpxX,vpxY) = getVizPixel(frameWidth*displayFactor,frameHeight*displayFactor,vizCoordsX,vizCoordsY,mLocX[-1],mLocY[-1])
+                    vizAvgMua[vpxX,vpxY] = ((vizAvgMua[vpxX,vpxY] * vizNum[vpxX,vpxY]) + measMua[measNum])/(vizNum[vpxX,vpxY] + 1)
+                    vizNum[vpxX,vpxY] = vizNum[vpxX,vpxY] + 1
+                    measNum = measNum + 1
+                    #print("%d, %d" % (vpxX,vpxY))
+                    #mMua.append(measMua[measNum])
                     
               
                     
@@ -253,19 +301,55 @@ if __name__ == '__main__':
                 sensorPathImage[frameNum,:]=[ptXInt,ptYInt]
                 #Rescale image and convert to color for display
                 frameCol = cv2.cvtColor(cv2.resize(flatFrame,(int(frameWidth*displayFactor),int(frameHeight*displayFactor))),cv2.COLOR_GRAY2BGR)
+                frameCol = cv2.addWeighted(frameCol,1,colorBarIm,.95,0)
+                overlay = frameCol.copy()
+                
                 for c in range(len(mLocX)):
                   cv2.circle(frameCol,(mLocX[c],mLocY[c]),1,(0,0,255),-1)
                 #Plot grid corners as circles
                 #for i in range(len(corners2)):
                 cv2.circle(frameCol,(int(np.floor(corners2[0,0,0]*displayFactor)),int(np.floor(corners2[0,0,1]*displayFactor))),10,(0,0,255),2)
                 #cv2.drawChessboardCorners(frameCol,(7,6),corners2/2,patFound)
-                cv2.line(frameCol,(int(np.floor(imgp1[0,0,0]*displayFactor)),int(np.floor(imgp1[0,0,1]*displayFactor))),
-                         (int(np.floor(imgp2[0,0,0]*displayFactor)),int(np.floor(imgp2[0,0,1]*displayFactor))),(0,255,0),3)
-                cv2.line(frameCol,(int(np.floor(imgp2[0,0,0]*displayFactor)),int(np.floor(imgp2[0,0,1]*displayFactor))),
-                         (int(np.floor(imgp3[0,0,0]*displayFactor)),int(np.floor(imgp3[0,0,1]*displayFactor))),(0,255,0),3)
-                cv2.line(frameCol,(int(np.floor(imgp3[0,0,0]*displayFactor)),int(np.floor(imgp3[0,0,1]*displayFactor))),
-                         (int(np.floor(imgp4[0,0,0]*displayFactor)),int(np.floor(imgp4[0,0,1]*displayFactor))),(0,255,0),3)
-  
+                #cv2.line(frameCol,(int(np.floor(imgp1[0,0,0]*displayFactor)),int(np.floor(imgp1[0,0,1]*displayFactor))),
+                #         (int(np.floor(imgp2[0,0,0]*displayFactor)),int(np.floor(imgp2[0,0,1]*displayFactor))),(0,255,0),3)
+                #cv2.line(frameCol,(int(np.floor(imgp2[0,0,0]*displayFactor)),int(np.floor(imgp2[0,0,1]*displayFactor))),
+                #         (int(np.floor(imgp3[0,0,0]*displayFactor)),int(np.floor(imgp3[0,0,1]*displayFactor))),(0,255,0),3)
+                #cv2.line(frameCol,(int(np.floor(imgp3[0,0,0]*displayFactor)),int(np.floor(imgp3[0,0,1]*displayFactor))),
+                #         (int(np.floor(imgp4[0,0,0]*displayFactor)),int(np.floor(imgp4[0,0,1]*displayFactor))),(0,255,0),3)
+                
+                for xl in range(vizSize[0]):
+                    cv2.line(overlay, (int(vizCoordsX*xl),0),(int(vizCoordsX*xl),int(frameHeight*displayFactor)), (200,200,200),1)
+                    cv2.line(overlay, (0,int(vizCoordsY*xl)),(int(frameWidth*displayFactor),int(vizCoordsY*xl)),(200,200,200),1)
+                
+                numColFrames = sum(sum(vizAvgMua > 0))
+                nonzeroAvgMua = vizAvgMua[vizAvgMua > 0]
+                nonzeroIdxX, nonzeroIdxY = np.nonzero(vizAvgMua)
+                if numColFrames > 1 and max(nonzeroAvgMua)-min(nonzeroAvgMua) != 0:
+                    colMua = (nonzeroAvgMua - min(nonzeroAvgMua))/(max(nonzeroAvgMua)-min(nonzeroAvgMua))*255
+                else:
+                    colMua = np.zeros(numColFrames)
+                
+                
+                for v in range(numColFrames):
+                    thisCol = np.flip(np.array(cmap(int(colMua[v]))[0:3]))
+                    thisNumIms = vizNum[nonzeroIdxX[v],nonzeroIdxY[v]]
+                    x,y,w,h = int(vizCoordsX*nonzeroIdxX[v]),int(vizCoordsY*nonzeroIdxY[v]),int(vizCoordsX),int(vizCoordsY)
+                    sub_img = frameCol[y:y+h,x:x+w,:]
+                    rect_img = np.ones(sub_img.shape,dtype=np.uint8)
+                    rect_img[:,:,0] = rect_img[:,:,0] * thisCol[0] * 255
+                    rect_img[:,:,1] = rect_img[:,:,1] * thisCol[1] * 255
+                    rect_img[:,:,2] = rect_img[:,:,2] * thisCol[2] * 255
+                    alph = np.linspace(.1,.9,10)
+                    if thisNumIms > 10:
+                        thisAlphIdx = 9
+                    else:
+                        thisAlphIdx = thisNumIms-1
+                    
+                    res = cv2.addWeighted(sub_img,1-alph[thisAlphIdx],rect_img,alph[thisAlphIdx],1.0)
+                    frameCol[y:y+h,x:x+w,:] = res
+                    #cv2.rectangle(overlay,(int(vizCoordsX*nonzeroIdxX[v]),int(vizCoordsY*nonzeroIdxY[v])),(int(vizCoordsX*(nonzeroIdxX[v]+1)),int(vizCoordsY*(nonzeroIdxY[v]+1))),tuple(thisCol*255),-1)
+                
+                #cv2.rectangle(overlay,(int(vizCoordsX*vpxX),int(vizCoordsY*vpxY)),(int(vizCoordsX*(vpxX+1)),int(vizCoordsY*(vpxY+1))),(0,200,0),-1)
                 #Draw circle at detector location
                 cv2.circle(frameCol,(ptXInt,ptYInt),10,(255,0,0),-1)
                 fname = "trackedFrame_%04d.png" % frameNum
@@ -279,13 +363,33 @@ if __name__ == '__main__':
                 boardRect = []
             
             #Show the frame
-            try:
-                cv2.imshow('frame',frameCol)
-                #Press q to quit out of the loop
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-            except:
-                continue
+            #try:
+            alpha = 0.25
+            composite = cv2.addWeighted(overlay,alpha,frameCol,1-alpha,0)
+            textWidth = 150
+            if numColFrames > 1:
+                cv2.putText(\
+                    composite, #numpy array on which text is written
+                    "%.03f" % np.nanmax(nonzeroAvgMua),#text
+                    (int(frameWidth*displayFactor-textWidth),100), #position at which writing has to start
+                    cv2.FONT_HERSHEY_SIMPLEX, #font family
+                    1, #font size
+                    (255, 255, 255, 255), #font color
+                    2) #font stroke
+                cv2.putText(
+                    composite, #numpy array on which text is written
+                    "%.03f" % np.nanmin(nonzeroAvgMua), #text
+                    (int(frameWidth*displayFactor-textWidth),600), #position at which writing has to start
+                    cv2.FONT_HERSHEY_SIMPLEX, #font family
+                    1, #font size
+                    (255, 255, 255, 255), #font color
+                    2) #font stroke
+            cv2.imshow('frame',composite)
+            #Press q to quit out of the loop
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            #except:
+            #    continue
         vidIdx = vidIdx + 1
         cap.release()
     cv2.destroyAllWindows()

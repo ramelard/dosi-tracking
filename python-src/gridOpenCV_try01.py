@@ -13,8 +13,8 @@ import os
 import glob
 import time
 from matplotlib import pyplot as plt
-from scipy.io import loadmat
-import pickle
+#from scipy.io import loadmat
+#import pickle
 
 #generateGridPoints
 #
@@ -119,6 +119,7 @@ if __name__ == '__main__':
        
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #Convert to grayscale
             #This is the second half of the undistortion function that is pretty fast
+            #flatFrame = gray.copy()
             cv2.remap(gray,map1,map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,dst=flatFrame)
             
             #Shrink the frame for finding corners
@@ -258,53 +259,53 @@ if __name__ == '__main__':
     #Rudimentary plots
    
     
-    plt.figure()
-    plt.imshow(frameCol)
-    plt.plot(pathXImage, pathYImage)
+    # plt.figure()
+    # plt.imshow(frameCol)
+    # plt.plot(pathXImage, pathYImage)
     
-    dat = loadmat(os.path.join(dataDir,'track_probe_variables-0519_1645.mat'))
-    #dat = loadmat(os.path.join(dataDir,'track_probe_variables-0515_1554.mat'))
-    matlab3d=dat['sensor3D']
-    matlab2d = dat['sensor_route']
-    matlabMask = dat['sensor_mask'].T
-    mlM = [bool(x[0]) for x in matlabMask]
+    # dat = loadmat(os.path.join(dataDir,'track_probe_variables-0519_1645.mat'))
+    # #dat = loadmat(os.path.join(dataDir,'track_probe_variables-0515_1554.mat'))
+    # matlab3d=dat['sensor3D']
+    # matlab2d = dat['sensor_route']
+    # matlabMask = dat['sensor_mask'].T
+    # mlM = [bool(x[0]) for x in matlabMask]
     
-    plt.figure()   
-    plt.plot(pathXWorld[sensorMask],pathYWorld[sensorMask],'o')
-    plt.plot(matlab3d[0,mlM],matlab3d[1,mlM],'o')
-    plt.legend(('Python','Matlab'))
-    plt.xlabel('X-Position (mm)')
-    plt.ylabel('Y-Position (mm)')
-    plt.title('World coordinates of sensor')
-    plt.savefig('PositionOverlay_leg.png')
+    # plt.figure()   
+    # plt.plot(pathXWorld[sensorMask],pathYWorld[sensorMask],'o')
+    # plt.plot(matlab3d[0,mlM],matlab3d[1,mlM],'o')
+    # plt.legend(('Python','Matlab'))
+    # plt.xlabel('X-Position (mm)')
+    # plt.ylabel('Y-Position (mm)')
+    # plt.title('World coordinates of sensor')
+    # plt.savefig('PositionOverlay_leg.png')
     
-    plt.figure()
-    plt.plot(pathXImage[sensorMask],pathYImage[sensorMask])
-    plt.plot(matlab2d[0,mlM],matlab2d[1,mlM])
+    # plt.figure()
+    # plt.plot(pathXImage[sensorMask],pathYImage[sensorMask])
+    # plt.plot(matlab2d[0,mlM],matlab2d[1,mlM])
     
-    diffX = pathXWorld[0:800] - matlab3d[0,0:800]
-    diffY = pathYWorld[0:800] - matlab3d[1,0:800]
-    diffZ = pathZWorld[0:800] - matlab3d[2,0:800]
+    # diffX = pathXWorld[0:800] - matlab3d[0,0:800]
+    # diffY = pathYWorld[0:800] - matlab3d[1,0:800]
+    # diffZ = pathZWorld[0:800] - matlab3d[2,0:800]
     
-    totalDiff = np.sqrt(diffX**2 + diffY**2 + diffZ**2)
+    # totalDiff = np.sqrt(diffX**2 + diffY**2 + diffZ**2)
     
-    plt.figure()
-    plt.hist(totalDiff,bins=100)
+    # plt.figure()
+    # plt.hist(totalDiff,bins=100)
     
-    t = np.arange(len(diffX))/fps
+    # t = np.arange(len(diffX))/fps
     
 
-    fig,ax=plt.subplots(3,1,sharex=True,figsize = (7,10))
-    ax[0].plot(t,diffX)
-    ax[0].set(ylabel='X-Difference (mm)',title='Matlab vs. Python')
-    ax[1].plot(t,diffY)
-    ax[1].set(ylabel='Y-Difference (mm)')
-    ax[2].plot(t,diffZ)
-    ax[2].set(xlabel='Time (s)',ylabel='Z-Difference (mm)')
-    plt.savefig('PositionDifference_leg.png')
+    # fig,ax=plt.subplots(3,1,sharex=True,figsize = (7,10))
+    # ax[0].plot(t,diffX)
+    # ax[0].set(ylabel='X-Difference (mm)',title='Matlab vs. Python')
+    # ax[1].plot(t,diffY)
+    # ax[1].set(ylabel='Y-Difference (mm)')
+    # ax[2].plot(t,diffZ)
+    # ax[2].set(xlabel='Time (s)',ylabel='Z-Difference (mm)')
+    # plt.savefig('PositionDifference_leg.png')
     
-    with open(os.path.join(saveDir,'selectedExtrinsics.pkl'), 'wb') as f:  
-        pickle.dump([saveRot,saveTrans], f)
+    # with open(os.path.join(saveDir,'selectedExtrinsics.pkl'), 'wb') as f:  
+    #     pickle.dump([saveRot,saveTrans], f)
 
     
 
