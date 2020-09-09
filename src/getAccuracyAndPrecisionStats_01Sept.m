@@ -57,13 +57,88 @@ for i = 1:numRows
     trueX((i-1)*31+1:(i-1)*31 + 31) = 0:-5:-150;
     trueY((i-1)*31+1:(i-1)*31 + 31) = ones(1,31) * -25.4*(i-1);
 end
+%Calculate distance
 trueDistFromStart = sqrt((trueX-trueX(1)).^2 + (trueY-trueY(1)).^2 + (trueZ-trueZ(1)).^2);
 measDistFromStart = sqrt((u3-u3(1)).^2 + (v3-v3(1)).^2 + (w3-w3(1)).^2);
+%Fit plane to world data
+DM = [u3, v3, ones(size(w3))];
+B = DM\w3;
+%First I need to rotate the plane to the z=0 axis
+%Normal to best fit plane
+normal0 = [-B(1),-B(2),1];
+normal = normal0/norm(normal0);
+%Normal to z=0 plane
+normalZ = [0,0,1];
+%Axis-angle representation
+rot_angle = acos(dot(normalZ,normal)); %Rotation angle to rotate plane onto z axis
+rot_axis = cross(normalZ,normal); %Axis to rotate around
+rot_axis = rot_axis/norm(rot_axis); %Make it a unit vector
+axAng = rot_axis*rot_angle; %Set up the rotation vector
+rot_mat = rotationVectorToMatrix(axAng); %Calculate rotation matrix
+%Rotate the points
+rotPts = zeros(numel(u3),3);
+for i = 1:numel(u3)
+    rotPts(i,:) = rot_mat * [u3(i);v3(i);w3(i)];
+end
+%Also set up a rectangle for visualization
+rectX = [min(u3(:)),min(u3(:)),max(u3(:)),max(u3(:))];
+rectY = [min(v3(:)),max(v3(:)),max(v3(:)),min(v3(:))];
+rectZ = B(1) * rectX + B(2)*rectY + B(3);
+rotRect = zeros(length(rectX),3);
+for p = 1:length(rectX)
+    rotRect(p,:) = rot_mat * [rectX(p);rectY(p);rectZ(p)];
+end
+%Translate the points in the minus Z direction so the best fit plane is at
+%z=0
+rotPts(:,3) = rotPts(:,3) - rotRect(1,3);
+%Rotate the points about the z axis so the measurements are aligned with
+%the x axis
+pts2D = rotPts(:,1:2);
+lastLine = rotPts(218:248,:); %Use the last line b/c it's the straightest
+lm=polyfit(lastLine(:,1),lastLine(:,2),1);
+ang2D = atan(lm(1)); %angle to rotate around
+rotMat2D = rotationVectorToMatrix([0,0,ang2D]); %Rotation matrix
+%Calculate final points
+finPts = zeros(numel(u3),3);
+for i = 1:numel(u3)
+    finPts(i,:) = rotMat2D * [rotPts(i,1),rotPts(i,2),rotPts(i,3)]';
+end
+%%
+%Plot the final points
+figure
+hold on
+plot3(trueX,trueY,trueZ,'o')
+plot3(finPts(:,1),finPts(:,2),finPts(:,3),'*')
+xlabel('X (mm)')
+ylabel('Y (mm)')
+zlabel('Z (mm)')
+title('Recovered points via rotation')
+legend('True','Estimated')
+% DM = [rotPts(:,1), rotPts(:,2), ones(size(w3))];
+% B = DM\w3;
+figure
+plot3(u3,v3,w3,'o')
+hold on
+plot3(rotPts(:,1),rotPts(:,2),rotPts(:,3),'*')
+axis equal
 %Plotting
+%Compare the \ and pinv method
 figure
 plot3(u3,v3,w3,'o')
 hold on
 plot3(u4,v4,w4,'*')
+
+%Check out best fit plane
+figure
+plot3(u3,v3,w3,'o')
+hold on
+h=fill3(rectX,rectY,rectZ,'r');
+set(h,'facealpha',0.5)
+plot3(rotPts(:,1),rotPts(:,2),rotPts(:,3),'*')
+k=fill3(rotRect(:,1),rotRect(:,2),rotRect(:,3),'b');
+set(k,'facealpha',0.5);
+plot3([0,30*normal(1)],[0,30*normal(2)],[B(3),B(3)+30*normal(3)],'linewidth',2)
+axis equal
 
 figure
 plot(trueDistFromStart,'o')
