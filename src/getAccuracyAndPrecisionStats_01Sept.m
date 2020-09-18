@@ -14,6 +14,8 @@ transVecs = A(:,[10:12]);
 %Intrinsics
 camMat=readNPY('../data/cameraParams.npz/cameraMatrix.npy');
 
+Smid_wc = [7.5, 4, 16];
+
 %Origin of world coords
 worldOrgIdx = 1;
 rotVec1 = rotVecs(worldOrgIdx,:);
@@ -24,8 +26,29 @@ u3 = zeros(size(x)); v3 = zeros(size(x)); w3=zeros(size(x));
 for i = 1:length(x)
     if ~isnan(x(i))
         %wc = inv(M)* [x3(i),y3(i),z3(i),1]';
-        c = [x(i),y(i),z(i)]' - [x(worldOrgIdx),y(worldOrgIdx),z(worldOrgIdx)]';
-        wc2 = rotMat1\c;
+        % **WANT TO GO [CAMERA COORDINATES]-->[WORLD ORIGIN COORDINATES]
+        % see main_track_probe.m line 188-193
+        xw = [x(i), y(i), z(i)]';
+        
+        rotVeci = rotVecs(i,:);
+        rotMati = rotationVectorToMatrix([rotVec1(1),rotVec1(2),rotVec1(3)]);
+        transVeci = transVecs(i,:);
+        Mi = [rotMati transVeci(:); 0 0 0 1];
+        
+        M = [rotMat1' transVec1(:); 0 0 0 1];
+        rotVec1 = rotVecs(worldOrgIdx,:);
+        rotMat1 = rotationVectorToMatrix([rotVec1(1),rotVec1(2),rotVec1(3)]);
+%         P_A = xw;
+        P_A = rotMati' * sdmid_wc' + transVeci(:);
+%         disp(i), disp([P_A, xw])
+        % Define point relative to original world coordinates
+        P_B = pinv(M) * [P_A; 1];
+        wc2 = P_B(1:3);
+        
+        
+        
+%         c = [x(i),y(i),z(i)]' - [x(worldOrgIdx),y(worldOrgIdx),z(worldOrgIdx)]';
+%         wc2 = rotMat1\c;
     else
         wc2 = [NaN, NaN,NaN];
     end
